@@ -131,14 +131,6 @@ SYSTEM_PROMPT = """
 # ==================== 侧边栏设置 ====================
 with st.sidebar:
     st.header("⚙️ 设置")
-    # 依然保留测试模式，好习惯
-    dev_mode = st.toggle("🛠️ 开启测试模式 (Mock)", value=True)
-    
-    if dev_mode:
-        st.info("🟢 测试模式：不耗额度，AI 回复假数据。")
-    else:
-        st.success("🔵 DeepSeek 模式：便宜量大，放心聊！")
-    # ... 在 st.header 或其他设置下面插入 ...
     
     st.divider()
     # 语速调节滑块：范围从 -50% (慢) 到 +50% (快)，默认 0
@@ -293,62 +285,41 @@ if final_input:
     # 2. 生成回复
     with st.chat_message("assistant", avatar="👩‍🏫"):
         message_placeholder = st.empty()
-        
-        # --- 情况 A: 测试模式 ---
-        if dev_mode:
-            with st.spinner("（兰正在思考...）"):
-                time.sleep(1)
-                fake_reply = f"""
-这真的很Chill！你刚才问：{prompt}。
---------------------
-📚 **粤语小贴士**:
-* **粤语**: 这是一个测试回复。
-* **粤拼**: ze4 si6 jat1 go3 cak1 si3 wui4 fuk1
-* **意思**: 这是 DeepSeek 的测试模式。
---------------------
-"""
-                message_placeholder.markdown(fake_reply)
-                st.session_state.messages.append({"role": "assistant", "content": fake_reply})
-        
-        # --- 情况 B: DeepSeek 真实模式 ---
-        else:
-            if not client:
-                st.error("找不到 DEEPSEEK_API_KEY，请检查 .env 文件！")
-            else:
-                try:
-                    with st.spinner("DeepSeek 正在思考..."):
-                        # 构造符合 OpenAI 格式的消息列表
-                        # 必须把 System Prompt 放在最前面
-                        messages_for_ai = [
-                            {"role": "system", "content": SYSTEM_PROMPT}
-                        ]
-                        # 把历史记录也加进去（只取最近 10 条，省钱又快）
-                        for msg in st.session_state.messages[-10:]: 
-                            messages_for_ai.append({"role": msg["role"], "content": msg["content"]})
-                        
-                        # === 发起请求 ===
-                        response = client.chat.completions.create(
-                            model="deepseek-chat", # DeepSeek V3 的模型名
-                            messages=messages_for_ai,
-                            temperature=1.3, # DeepSeek 建议 V3 设置高一点的温度以增加多样性
-                            stream=False
-                        )
-                        
-                        full_text = response.choices[0].message.content
-                        
-                        message_placeholder.markdown(full_text)
-                        st.session_state.messages.append({"role": "assistant", "content": full_text})
 
-                        # === 让 AI 开口说话 ===
-                    # 逻辑：只读分割线 "---" 上面的口语部分，下面的拼音解析不读
+    
+        if not client:
+                st.error("🔑 请输入 API Key 或联系作者配置后台 Key")
+        else:
+            try:
+                with st.spinner("兰正在思考..."):
+                    # 1. 准备消息历史
+                    messages_for_ai = [{"role": "system", "content": SYSTEM_PROMPT}]
+                    for msg in st.session_state.messages[-6:]:
+                        messages_for_ai.append({"role": msg["role"], "content": msg["content"]})
+                        
+                    # 2. 发起请求 (修复了括号问题)
+                    response = client.chat.completions.create(
+                        model=model_name,  # 使用侧边栏决定的模型名字
+                        messages=messages_for_ai,
+                        temperature=1.0,   # 1.0 是一个对 DeepSeek 和 GPT 都比较平衡的数值
+                        stream=False
+                    )
+                        
+                    # 3. 获取回复内容
+                    full_text = response.choices[0].message.content
+                    
+                    # 4. 显示和保存
+                    message_placeholder.markdown(full_text)
+                    st.session_state.messages.append({"role": "assistant", "content": full_text})
+                        
+                    # 5. 生成语音 (逻辑不变)
                     spoken_text = full_text.split("---")[0]
-                    # === 新增：洗干净再读 ===
                     clean_spoken_text = clean_text_for_speech(spoken_text)
-                    if clean_spoken_text.strip(): # 判断洗完还剩不剩东西
+                        
+                    if clean_spoken_text.strip():
                         with st.spinner("正在生成语音..."):
-                            play_audio(clean_spoken_text) # <--- 干干净净地进去
-                    # === 新增：聊完一句，马上保存 ===
-                    save_data()
+                            play_audio(clean_spoken_text)
                 
-                except Exception as e:
-                    st.error(f"DeepSeek 连接出错了: {e}")
+            except Exception as e:
+                st.error(f"出错了: {e}")
+                
