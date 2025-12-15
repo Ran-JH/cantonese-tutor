@@ -131,9 +131,21 @@ SYSTEM_PROMPT = """
 # ==================== 侧边栏设置 ====================
 with st.sidebar:
     st.header("⚙️ 设置")
+    st.divider()
+
+    # === 1. 模型选择与 Key ===
+    st.subheader("🤖 模型配置")
+    provider = st.radio("选择模型厂商", ["DeepSeek (默认)", "OpenAI", "Google Gemini"], index=0)
+    
+    user_api_key = st.text_input(
+        "🔑 你的 API Key (可选)", 
+        type="password", 
+        help="填入你自己的 Key。如果不填，将使用系统的免费额度 (仅限 DeepSeek)"
+    )
     
     st.divider()
-    # 语速调节滑块：范围从 -50% (慢) 到 +50% (快)，默认 0
+    
+    # === 2. 语速 & 语言 ===
     speed = st.slider("🐢 语速调节 🐇", -50, 50, 0, step=10)
     
     # 关键：把数字变成 edge-tts 能听懂的字符串，比如 "+10%" 或 "-20%"
@@ -214,13 +226,41 @@ with st.sidebar:
 
 # ==================== 初始化客户端 (通用版) ====================
 @st.cache_resource
-def get_client():
-    api_key = os.getenv("DEEPSEEK_API_KEY") # 记得在 .env 里改名
-    if not api_key:
-        return None
-    #这是关键：指向 DeepSeek 的服务器，而不是 OpenAI 的
-    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+def get_client(user_key=None, provider="DeepSeek (默认)"):
+    api_key = None
+    base_url = ""
+    model_name = ""
+    
+    # === 第一层：确定 API Key ===
+    # 优先用用户输入的 User Key
+    if user_key and user_key.strip():
+        api_key = user_key
+    # 如果用户没填，去读系统环境变量 (Secrets)
+    else:
+        if provider == "DeepSeek (默认)":
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+        elif provider == "OpenAI":
+            api_key = os.getenv("OPENAI_API_KEY")
+        elif provider == "Google Gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
 
+    if not api_key:
+        return None, None # 既没填，后台也没配
+
+    # === 第二层：确定厂商地址 ===
+    if provider == "OpenAI":
+        base_url = "https://api.openai.com/v1"
+        model_name = "gpt-4o-mini"
+    elif provider == "Google Gemini":
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        model_name = "gemini-2.0-flash"
+    else: # DeepSeek
+        base_url = "https://api.deepseek.com"
+        model_name = "deepseek-chat"
+
+    # 返回客户端和模型名
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    return client, model_name
 client = get_client()
 
 # ==================== 主界面 ====================
@@ -322,4 +362,3 @@ if final_input:
                 
             except Exception as e:
                 st.error(f"出错了: {e}")
-                
