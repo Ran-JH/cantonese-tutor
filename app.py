@@ -261,7 +261,7 @@ def get_client(user_key=None, provider="DeepSeek (默认)"):
     # 返回客户端和模型名
     client = OpenAI(api_key=api_key, base_url=base_url)
     return client, model_name
-client = get_client()
+client, model_name = get_client(user_api_key, provider)
 
 # ==================== 主界面 ====================
 st.title("🇭🇰 粤语智能导师 (DeepSeek V3)")
